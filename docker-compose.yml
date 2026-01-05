@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  discord-recorder:
+    build: .
+    container_name: discord-recorder
+    restart: unless-stopped
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - GUILD_ID=${GUILD_ID:-}
+      - STT_MODE=${STT_MODE:-local}
+      - WHISPER_MODEL=${WHISPER_MODEL:-base}
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY:-}
+      - CLEANUP_TEMP_FILES=${CLEANUP_TEMP_FILES:-true}
+    volumes:
+      - ./recordings:/app/recordings
+      - ./transcripts:/app/transcripts

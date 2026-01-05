@@ -1,0 +1,76 @@
+Discord bot’u hiç bilmeyen birinin de çalıştırabileceği şekilde, uçtan uca bir “toplantı kaydı + toplantı sonunda transcript’i aynı kanala gönderme” botu geliştirmeni istiyorum.
+
+ÖNEMLİ: Bana burada kod parçaları veya örnek kod gösterme. Sadece tam çalışan proje üret (dosyalar, kurulum, çalıştırma, deploy talimatları). Proje Node.js tabanlı olsun ve Discord voice kanallarından ses alabilsin.
+
+İSTEDİĞİM DAVRANIŞ (TAM OLARAK):
+1) Bot bir Discord sunucusunda çalışacak.
+2) Herhangi bir Voice Channel’da insan sayısı 2’ye çıktığı an:
+   - Bot otomatik olarak o Voice Channel’a join olsun.
+   - Aynı Voice Channel’ın “Text Chat in Voice” alanına (yani voice kanalının chat’ine) şu formatta mesaj atsın:
+     “⏺ Recording started — YYYY-MM-DD HH:mm:ss (Europe/Istanbul)”
+   - O andan itibaren ses kaydını başlatsın.
+3) Kaydı, voice kanalda tekrar 1 kişi kalana kadar sürdürsün (yani 2+ kişi oldukça kayıt devam).
+4) Voice kanalda insan sayısı 1’e düştüğü an:
+   - Kayıt otomatik dursun ve bot voice kanaldan çıksın.
+   - Toplantının FULL transcript’i üretilsin.
+   - Transcript şu özelliklere sahip olsun:
+     a) Zaman çizelgesiyle birleşmiş olsun: her satırda timestamp olsun.
+        Örnek satır formatı:
+        [00:12:05] <speaker_name_or_userid>: konuşma metni...
+     b) Mümkünse konuşan kişi bilgisi (speaker label) Discord kullanıcılarından gelsin (kullanıcı bazlı stream/track).
+     c) Çıktı tek bir .txt dosyası olsun (ör: meeting_2026-01-04_164210.txt).
+   - Bu .txt dosyasını “aynı voice kanalının chat’ine” dosya olarak yükleyip gönder.
+   - Dosyayla birlikte bir mesaj daha at:
+     “✅ Transcript ready — <dosya_adı>”
+5) Bot aynı anda sadece 1 aktif kayıt oturumu yönetsin (MVP). İkinci bir voice kanalda 2 kişi olsa bile, bot “busy” modda olsun ve başlamasın. (Log yazabilir ama kanala mesaj atmak zorunda değil.)
+6) Bot yeniden kullanılabilir olsun: aynı süreç gün içinde tekrar tekrar çalışabilsin.
+
+KAPSAM / TEKNİK İSTEKLER:
+- Discord.js ve Discord voice desteğiyle ses almayı destekleyen doğru paketleri kullan.
+- Voice kanaldan gelen sesi dosyaya yazarken sağlam bir pipeline kur:
+  - Kişi bazlı ayrı ses track’leri üret (tercih edilen), ya da bunun mümkün olmadığı durumda tek miks kayıt.
+  - Kaydı “ham” tutma: STT’ye gidecek güvenilir format üret (örn. wav/pcm ya da STT servisinin kabul ettiği bir format).
+- Transcript üretimi:
+  - STT için iki mod sun:
+    (A) LOCAL: Kullanıcının kendi bilgisayarında çalıştırabileceği local whisper (komut satırıyla).
+    (B) CLOUD: API key ile çalışan bir servis (örn. Deepgram/AssemblyAI gibi).
+  - Varsayılanı LOCAL yap (API key gerektirmesin). Ama CLOUD opsiyonu da hazır dursun.
+  - Transcript segmentlerinde timestamp üret ve tek bir timeline’a merge et.
+- Loglama:
+  - Konsola net loglar bas: “Joined channel”, “Recording started”, “Recording stopped”, “Transcribing…”, “Uploaded transcript”.
+  - Hata olursa bot çökmesin; kayıt kapansın ve kanala “⚠️ Recording failed” gibi bir mesaj atsın (mümkünse).
+- Konfigürasyon:
+  - .env ile TOKEN vs. ayarlanabilsin.
+  - Sunucu kısıtlaması opsiyonel: istersem sadece belirli bir GUILD_ID içinde çalışacak ayar koy.
+- Zaman dilimi: Europe/Istanbul kullan.
+- Dosya yönetimi:
+  - /recordings ve /transcripts gibi klasörler oluştur.
+  - Her oturum için ayrı klasör ve dosya adlandırma yap.
+  - Oturum bitince geçici ara dosyaları temizle (en azından opsiyonla).
+- Yetkiler:
+  - Botu sunucuya eklemek için gerekli izinleri ve OAuth2 invite link parametrelerini dokümante et.
+  - Voice’a bağlanma ve mesaj atma izinleri açıkça anlatılsın.
+
+KULLANICI DENEYİMİ / DOKÜMANTASYON:
+- README.md yaz:
+  - Discord Developer Portal’da bot açma adımları
+  - Gerekli intents/permissions
+  - Sunucuya ekleme
+  - Local çalıştırma
+  - Docker ile çalıştırma (opsiyonel ama çok tercih edilir)
+  - “Bot nerede çalışıyor?” açıklaması: botun çalıştığı makinede ses kaydı oluşur.
+  - Sık karşılaşılan sorunlar: voice permission, message permission, voice chat text channel erişimi, opus/ffmpeg bağımlılıkları.
+- Proje “tek komutla çalışsın”:
+  - npm install
+  - npm run start
+
+ÖNEMLİ KISIT:
+- Bana burada sohbet içinde kod snippetleri verme. Tam projeyi dosyalarıyla üret, README ile birlikte. Çıktın “kopyalayıp klasöre koyunca çalışan” bir proje olsun.
+
+ÇALIŞMA DOĞRULAMA:
+- Botu çalıştırdığımda şunu görebilmeliyim:
+  - 2 kişi voice’a girince bot geliyor ve “Recording started” mesajı atıyor
+  - 1 kişi kalınca bot duruyor
+  - Bir süre sonra transcript .txt aynı voice kanal chat’ine dosya olarak düşüyor
+
+Bu özellikleri MVP seviyesinde sağlamlaştır. Önce basit ama güvenilir çalışsın.
