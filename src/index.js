@@ -17,25 +17,74 @@ if (!process.env.DISCORD_TOKEN) {
   process.exit(1);
 }
 
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildPresences,
-  ],
-  presence: {
-    status: 'online',
-    activities: [{
-      name: 'voice channels',
-      type: 3, // Watching
-    }],
-  },
+// --- CLIENT POOL SETUP ---
+const allTokens = [process.env.DISCORD_TOKEN];
+if (process.env.WORKER_TOKENS) {
+  const workers = process.env.WORKER_TOKENS.split(',').map(t => t.trim()).filter(t => t.length > 0);
+  allTokens.push(...workers);
+}
+
+const clients = [];
+const readyClients = new Set();
+
+// Active recording sessions (Channel ID -> { session: RecordingSession, client: Client })
+// We index by Channel ID because that's unique per parallel recording
+const sessions = new Map();
+
+/**
+ * Initialize a single Discord client
+ */
+function createClient(token, index) {
+  const client = new Client({
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildVoiceStates,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent,
+      GatewayIntentBits.GuildPresences,
+    ],
+    presence: {
+      status: 'online',
+      activities: [{
+        name: index === 0 ? 'commands' : `Recorder #${index}`,
+        type: 3, // Watching
+      }],
+    },
+  });
+
+  // --- EVENT HANDLERS ---
+
+  client.once(Events.ClientReady, (c) => {
+    logger.info(`Bot #${index} ready! Logged in as ${c.user.tag}`);
+    readyClients.add(client);
+  });
+
+  client.on(Events.Error, (error) => {
+    logger.error(`Client #${index} error:`, error);
+  });
+
+  // Only the MAIN bot (index 0) handles interaction commands
+  if (index === 0) {
+    client.on(Events.InteractionCreate, handleInteraction);
+  }
+
+  // All bots listen to voice state updates to detect when THEY are alone or need to stop
+  client.on(Events.VoiceStateUpdate, (oldState, newState) => handleVoiceStateUpdate(client, oldState, newState));
+
+  client.login(token).catch(err => {
+    logger.error(`Failed to login bot #${index}:`, err);
+  });
+
+  return client;
+}
+
+// Initialize all clients
+logger.info(`Initializing ${allTokens.length} bot(s)...`);
+allTokens.forEach((token, index) => {
+  clients.push(createClient(token, index));
 });
 
-// Active recording session (only one at a time for MVP)
-let activeSession = null;
+const mainClient = clients[0]; // The one that handles /slash commands
 
 /**
  * Count human members in a voice channel (excluding bots)
@@ -45,143 +94,162 @@ function countHumans(channel) {
 }
 
 /**
- * Get the text channel associated with a voice channel
- * For voice channels, we can send messages directly to the voice channel
+ * Handle voice state updates for a specific client
  */
-function getVoiceTextChannel(voiceChannel) {
-  // In Discord, voice channels can receive text messages directly
-  return voiceChannel;
-}
-
-/**
- * Handle voice state updates - detect when to start/stop recording
- */
-async function handleVoiceStateUpdate(oldState, newState) {
-  // Get the relevant channel (new or old)
+async function handleVoiceStateUpdate(client, oldState, newState) {
   const channel = newState.channel || oldState.channel;
   if (!channel) return;
 
-  // Skip if guild restriction is set and doesn't match
-  if (process.env.GUILD_ID && channel.guild.id !== process.env.GUILD_ID) {
-    return;
-  }
+  // We only care if THIS client is involved in a session
+  // Find if there is a session for this channel (or the old one) logic is complex because 
+  // we map by ChannelID.
 
-  const humanCount = channel ? countHumans(channel) : 0;
+  // Use guild lookup for safety or iterate sessions
+  // Optimization: check if 'client.user.id' is in the channel?
 
-  /* Auto-start logic removed */
+  // Simplified logic: If we have a session for this channel, check empty state
+  const channelId = channel.id;
+  const sessionData = sessions.get(channelId);
 
-  // --- STOP RECORDING CHECK ---
-  // Always check the active session's channel if we have one
-  if (activeSession) {
-    const sessionChannel = client.channels.cache.get(activeSession.channelId);
+  if (sessionData && sessionData.client.user.id === client.user.id) {
+    const session = sessionData.session;
+    const sessionChannel = client.channels.cache.get(session.channelId);
 
     if (sessionChannel) {
       const currentHumans = countHumans(sessionChannel);
-
       if (currentHumans === 0) {
         logger.info(`No humans left in ${sessionChannel.name}, stopping recording...`);
-
         try {
-          await activeSession.stop();
-        } catch (error) {
-          logger.error('Failed to stop recording session:', error);
+          await session.stop();
+        } catch (e) {
+          logger.error('Stop error:', e);
         } finally {
-          activeSession = null;
+          sessions.delete(channelId);
         }
-        return; // Stopped, so don't process START logic below for this event
       }
-    } else {
-      // Channel might have been deleted? Stop safely.
-      logger.warn('Recorder channel not found, stopping session.');
-      try { await activeSession.stop(); } catch (e) { } finally { activeSession = null; }
-      return;
     }
   }
-
-  /* 
-   * AUTOMATIC RECORDING & SWITCHING DISABLED
-   * Only Manual /record and /end_recording commands are active.
-   */
 }
 
-// Slash Command Handler
-client.on(Events.InteractionCreate, async interaction => {
+/**
+ * Find an available worker bot for a guild
+ * A bot is available if it is NOT currently connected to any voice channel in this guild
+ */
+function getAvailableClient(guildId) {
+  for (const client of clients) {
+    if (!readyClients.has(client)) continue;
+
+    // Check if this client is already in a voice channel IN THIS GUILD
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) continue; // Bot not in guild?
+
+    const myVoiceState = guild.members.me?.voice;
+    if (!myVoiceState || !myVoiceState.channelId) {
+      return client; // Found one!
+    }
+  }
+  return null;
+}
+
+/**
+ * Handle Slash Commands (Main Bot Only)
+ */
+async function handleInteraction(interaction) {
   if (!interaction.isChatInputCommand()) return;
 
+  const guildId = interaction.guildId;
+  if (!guildId) return;
+
+  // /record
   if (interaction.commandName === 'record') {
-    const channel = interaction.member.voice.channel;
-    if (!channel) {
+    const memberVoice = interaction.member.voice;
+    if (!memberVoice || !memberVoice.channelId) {
       return interaction.reply({ content: '❌ Lütfen önce bir ses kanalına katılın!', ephemeral: true });
     }
 
-    if (activeSession) {
-      return interaction.reply({ content: `⚠️ Zaten **${activeSession.channel.name}** kanalında kayıttayım.`, ephemeral: true });
+    const targetChannelId = memberVoice.channelId;
+    const targetChannelName = memberVoice.channel ? memberVoice.channel.name : 'Unknown';
+
+    // Check if ALREADY recording this channel
+    if (sessions.has(targetChannelId)) {
+      return interaction.reply({ content: `⚠️ **${targetChannelName}** kanalı zaten kaydediliyor.`, ephemeral: true });
+    }
+
+    // Find available worker
+    const workerClient = getAvailableClient(guildId);
+
+    if (!workerClient) {
+      return interaction.reply({ content: `⚠️ Şu an tüm kayıt botları meşgul veya bu sunucuda başka bir kanalda.`, ephemeral: true });
     }
 
     try {
-      await interaction.reply(`🔴 **${channel.name}** kanalında kayıt başlatılıyor...`);
-      activeSession = new RecordingSession(channel, client);
-      await activeSession.start();
+      await interaction.reply(`🔴 **${targetChannelName}** kanalına ${workerClient.user.username} bağlanıyor...`);
+
+      // We need to get the Channel object from the WORKER's perspective/cache
+      const workerGuild = await workerClient.guilds.fetch(guildId);
+      const workerChannel = await workerGuild.channels.fetch(targetChannelId);
+
+      const newSession = new RecordingSession(workerChannel, workerClient);
+
+      sessions.set(targetChannelId, {
+        session: newSession,
+        client: workerClient
+      });
+
+      await newSession.start();
+
     } catch (error) {
-      logger.error('Manual recording start failed:', error);
-      activeSession = null;
-      await interaction.editReply('❌ Kayıt başlatılırken bir hata oluştu.');
+      logger.error('Start failed:', error);
+      sessions.delete(targetChannelId);
+      await interaction.editReply('❌ Kayıt başlatılamadı: ' + error.message);
     }
   }
 
+  // /end_recording
   if (interaction.commandName === 'end_recording' || interaction.commandName === 'stop') {
-    if (!activeSession) {
-      return interaction.reply({ content: '⚠️ Şu an aktif bir kayıt yok.', ephemeral: true });
+    // Find session for user's current channel
+    const memberVoice = interaction.member.voice;
+    const channelId = memberVoice ? memberVoice.channelId : null;
+
+    // If user is not in a channel, or we don't have a session for that channel
+    // Maybe allow stopping ANY session in the guild if user is admin?
+    // For now, simple logic: User must be in the recorded channel
+
+    let sessionData = channelId ? sessions.get(channelId) : null;
+
+    if (!sessionData) {
+      // Fallback: If user is not in channel, check if there is ONLY ONE session in this guild?
+      // TODO: Implement cleaner lookup
+      return interaction.reply({ content: '⚠️ Bulunduğunuz kanalda aktif bir kayıt yok.', ephemeral: true });
     }
 
     try {
-      await interaction.reply('⏳ Kayıt durduruluyor ve transkript oluşturuluyor...');
-      await activeSession.stop();
-      activeSession = null;
-      await interaction.followUp('✅ Kayıt durduruldu. Ses dosyası ve transkript hazırlanıyor...');
+      await interaction.reply('⏳ Kayıt durduruluyor...');
+      sessions.delete(channelId); // Remove immediately
+
+      await sessionData.session.stop();
+
+      await interaction.followUp('✅ Kayıt durduruldu. Transkript hazırlanıyor...');
     } catch (error) {
-      logger.error('Manual recording stop failed:', error);
-      activeSession = null;
-      await interaction.editReply('❌ Kayıt durdurulurken bir hata oluştu.');
+      logger.error('Stop failed:', error);
+      await interaction.editReply('❌ Hata oluştu.');
     }
   }
-});
+}
 
-// Event handlers
-client.once(Events.ClientReady, (c) => {
-  logger.info(`Bot is ready! Logged in as ${c.user.tag}`);
-  logger.info(`Monitoring voice channels for 2+ humans...`);
-
-  if (process.env.GUILD_ID) {
-    logger.info(`Guild restriction: ${process.env.GUILD_ID}`);
-  }
-});
-
-client.on(Events.VoiceStateUpdate, handleVoiceStateUpdate);
-
-client.on(Events.Error, (error) => {
-  logger.error('Discord client error:', error);
-});
-
-// Graceful shutdown
 // Graceful shutdown
 const shutdown = async () => {
   logger.info('Shutting down...');
 
-  if (activeSession) {
+  for (const [channelId, data] of sessions) {
     try {
-      await activeSession.stop();
-    } catch (error) {
-      logger.error('Error stopping session on shutdown:', error);
-    }
+      await data.session.stop();
+    } catch (e) { }
   }
 
-  client.destroy();
+  clients.forEach(c => c.destroy());
   process.exit(0);
 };
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
-
-// Start the bot
-client.login(process.env.DISCORD_TOKEN);

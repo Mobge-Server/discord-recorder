@@ -61,10 +61,12 @@ class RecordingSession {
                     adapterCreator: this.channel.guild.voiceAdapterCreator,
                     selfDeaf: false,
                     selfMute: true,
+                    group: this.client.user.id, // Isolate connection per bot client
                 });
 
-                // Wait for connection to be ready (60s timeout)
-                await entersState(this.connection, VoiceConnectionStatus.Ready, 60_000);
+                // Wait for connection to be ready (15s timeout instead of 60s)
+                // This prevents hanging for too long if UDP packets are dropped
+                await entersState(this.connection, VoiceConnectionStatus.Ready, 15_000);
                 logger.success(`Joined voice channel: ${this.channel.name}`);
                 lastError = null;
                 break;
@@ -72,18 +74,19 @@ class RecordingSession {
                 lastError = error;
                 logger.warn(`Voice connection attempt ${attempt} failed: ${error.message}`);
 
+                // Force cleanup before retry
                 if (this.connection) {
                     try {
                         this.connection.destroy();
-                    } catch (e) {
-                        // ignore
-                    }
+                    } catch (e) { /* ignore */ }
                     this.connection = null;
                 }
 
                 if (attempt < maxRetries) {
-                    logger.info(`Retrying in 3 seconds...`);
-                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    // Add random jitter to prevent thundering herd
+                    const delay = 1000 + Math.random() * 2000;
+                    logger.info(`Retrying in ${(delay / 1000).toFixed(1)} seconds...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
                 }
             }
         }

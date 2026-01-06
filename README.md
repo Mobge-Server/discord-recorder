@@ -56,6 +56,25 @@ Botu sunucunuzda bir ses kanalına çağırın:
 - Mac (Apple Silicon) üzerinde `opusscript` ve `ffmpeg` kullanılarak native modül sorunları aşılmıştır.
 - Cloud modu (Deepgram) varsayılan ve önerilen moddur. Yerel mod için `whisperx` kurulumu gerekir.
 
+## Yönetim ve İpuçları
+
+**Botu Yeniden Başlatma (Restart):**
+Eğer bot takılırsa, bağlantı sorunu yaşarsa veya `.env` değişikliği yaparsanız aşağıdaki komutla güvenli bir şekilde yeniden başlatabilirsiniz:
+
+```bash
+kill $(pgrep -f "node src/index.js") || true && sleep 2 && node src/index.js
+```
+
+**Paralel Kayıt (Multi-Bot):**
+Aynı sunucuda birden fazla kanalı aynı anda kaydetmek için ek botlara ihtiyacınız vardır.
+1. Yeni botlar oluşturun ve sunucuya davet edin (Privileged Intents açık olmalı).
+2. `.env` dosyasına tokenlarını ekleyin:
+   ```env
+   WORKER_TOKENS=ikinci_bot_token,ucuncu_bot_token
+   ```
+3. Botu yeniden başlatın. `/record` komutu otomatik olarak boşta olan botu yönlendirecektir.
+
 ## Lisans
+
 
 MIT
