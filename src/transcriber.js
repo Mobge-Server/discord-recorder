@@ -193,7 +193,7 @@ async function transcribeAudio(audioFile) {
         start: segment.start + (startOffset / 1000),
         end: segment.end + (startOffset / 1000),
         text: segment.text,
-        speaker: segment.speaker || `USER_${userId}`,
+        speaker: audioFile.displayName || segment.speaker || `USER_${userId}`,
         userId,
     }));
 

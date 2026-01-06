@@ -156,7 +156,26 @@ class RecordingSession {
 
             // 2. Transcribe
             logger.info('Transcribing...');
-            const transcriptions = await transcribeSession(recordedFiles, this.sessionDir);
+
+            // Resolving Usernames
+            const filesWithNames = await Promise.all(recordedFiles.map(async (file) => {
+                let displayName = `USER_${file.userId}`;
+                try {
+                    const member = await this.channel.guild.members.fetch(file.userId).catch(() => null);
+                    if (member) {
+                        displayName = member.displayName; // or member.user.username
+                    } else {
+                        // Try cache if fetch fails
+                        const user = this.client.users.cache.get(file.userId);
+                        if (user) displayName = user.username;
+                    }
+                } catch (e) {
+                    logger.warn(`Could not resolve name for user ${file.userId}`);
+                }
+                return { ...file, displayName };
+            }));
+
+            const transcriptions = await transcribeSession(filesWithNames, this.sessionDir);
 
             // Merge into timeline
             const outputFilename = `meeting_${this.sessionId}.txt`;
