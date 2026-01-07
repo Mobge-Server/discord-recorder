@@ -19,5 +19,11 @@ services:
     devices:
       - /dev/net/tun
     volumes:
-      - ./recordings:/app/recordings
-      - ./transcripts:/app/transcripts
+      - recordings-data:/app/recordings
+      - transcripts-data:/app/transcripts
+      - tailscale-data:/var/lib/tailscale
+
+volumes:
+  tailscale-data:
+  recordings-data:
+  transcripts-data:

@@ -26,7 +26,15 @@ graph LR
 
 1. **Tailscale Hesabı:** Bir Tailscale ağı oluşturulmalı.
 2. **Exit Node:** Yurt dışında (örn. Almanya) çalışan ve Exit Node olarak yapılandırılmış bir cihaz.
-3. **Auth Key:** Tailscale Admin Console üzerinden oluşturulmuş, `Reusable` ve `Ephemeral` (container'lar için önerilir) özellikli bir anahtar.
+3. **Auth Key:** Tailscale Admin Console üzerinden oluşturulmuş, `Reusable` (önerilen) veya `One-off` bir anahtar. Sistem persistence sağladığı için `One-off` anahtarlar da container restartlarında sorun çıkarmaz (ilk seferden sonra state dosyadan okunur).
+
+## Persistence (Kalıcılık)
+
+Docker container'ı yeniden başlatıldığında Tailscale oturumunun ve kayıtların kaybolmaması için Docker Volume'leri kullanılır:
+
+- `tailscale-data`: `/var/lib/tailscale` dizinini tutar. Bu sayede cihaz Tailscale ağında sabit kalır, her restartta yeni cihaz gibi görünmez veya re-auth gerektirmez.
+- `recordings-data`: `/app/recordings` dizini (ses kayıtları).
+- `transcripts-data`: `/app/transcripts` dizini (çeviri metinleri).
 
 ## Kurulum ve Konfigürasyon
 
@@ -54,6 +62,15 @@ services:
       - NET_ADMIN
     devices:
       - /dev/net/tun
+    volumes:
+      - recordings-data:/app/recordings
+      - transcripts-data:/app/transcripts
+      - tailscale-data:/var/lib/tailscale
+
+volumes:
+  tailscale-data:
+  recordings-data:
+  transcripts-data:
 ```
 
 ## Sorun Giderme
