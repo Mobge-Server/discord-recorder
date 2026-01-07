@@ -12,6 +12,12 @@ services:
       - WHISPER_MODEL=${WHISPER_MODEL:-base}
       - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY:-}
       - CLEANUP_TEMP_FILES=${CLEANUP_TEMP_FILES:-true}
+      - TAILSCALE_AUTH_KEY=${TAILSCALE_AUTH_KEY}
+      - TAILSCALE_EXIT_NODE_IP=${TAILSCALE_EXIT_NODE_IP}
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
     volumes:
       - ./recordings:/app/recordings
       - ./transcripts:/app/transcripts
