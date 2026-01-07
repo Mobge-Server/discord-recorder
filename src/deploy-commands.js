@@ -17,8 +17,14 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
         console.log('Slash komutları yükleniyor...');
 
         // Kullanıcı ID'leri
-        const CLIENT_ID = '1457376615456706602';
-        const GUILD_ID = '626008928605700097';
+        // Kullanıcı ID'leri
+        const CLIENT_ID = process.env.CLIENT_ID;
+        const GUILD_ID = process.env.GUILD_ID;
+
+        if (!CLIENT_ID || !GUILD_ID) {
+            console.error('Hata: CLIENT_ID veya GUILD_ID .env dosyasında tanımlanmamış!');
+            process.exit(1);
+        }
 
         await rest.put(
             Routes.applicationCommands(CLIENT_ID),
