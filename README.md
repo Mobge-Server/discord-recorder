@@ -34,15 +34,18 @@ Bu Discord botu, ses kanallarındaki konuşmaları kaydeder ve yapay zeka ile me
    DEEPGRAM_API_KEY=your_deepgram_key
    ```
 
-4. **Komutları Yükleyin:**
-   ```bash
-   node src/deploy-commands.js
-   ```
+### Script'ler
+- **Dev Mode:** `npm run dev` (auto deploy ile bot'u başlatır)
+- **Production:** `npm start` (auto deploy ile bot'u başlatır)
+- **Manual Deploy:** `npm run deploy` (sadece komutları güncelleyin)
 
-5. **Botu Başlatın:**
-   ```bash
-   node src/index.js
-   ```
+Not: İlk çalıştırma için veya komut değişiklikliğinde deploy zorunludur.
+Manual olarak yapmak için:
+```bash
+node src/deploy-commands.js
+```
+
+Botu üretime başlatın: ```npm start``` veya development için ```npm run dev```
 
 ## Kullanım
 
