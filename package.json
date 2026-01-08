@@ -4,8 +4,9 @@
   "description": "Discord voice channel recorder with automatic transcription",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "deploy": "node src/deploy-commands.js",
+    "start": "npm run deploy && node src/index.js",
+    "dev": "npm run deploy && node --watch src/index.js"
   },
   "keywords": [
     "discord",

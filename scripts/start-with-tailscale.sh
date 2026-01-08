@@ -48,7 +48,7 @@ fi
 
 # Start the application
 echo "Starting Node.js application..."
-node src/index.js &
+npm run start &
 
 # Wait for process
 wait $!
