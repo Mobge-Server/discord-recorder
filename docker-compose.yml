@@ -1,6 +1,8 @@
 services:
   wireguard:
-    image: linuxserver/wireguard
+    build:
+      context: .
+      dockerfile: Dockerfile.wireguard
     container_name: discord-recorder-wireguard
     cap_add:
       - NET_ADMIN
@@ -13,8 +15,6 @@ services:
       - WG_CONF0=${WG_CONF0}
     volumes:
       - /lib/modules:/lib/modules:ro
-      - wireguard-config:/config
-      - ./scripts/wireguard-entrypoint.sh:/wireguard-entrypoint.sh:ro
     entrypoint: ["/wireguard-entrypoint.sh", "/init"]
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
@@ -43,6 +43,5 @@ services:
       - transcripts-data:/app/transcripts
 
 volumes:
-  wireguard-config:
   recordings-data:
   transcripts-data:

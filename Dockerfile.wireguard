@@ -1,0 +1,4 @@
+FROM linuxserver/wireguard
+
+COPY scripts/wireguard-entrypoint.sh /wireguard-entrypoint.sh
+RUN chmod +x /wireguard-entrypoint.sh
