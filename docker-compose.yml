@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   wireguard:
     image: linuxserver/wireguard
@@ -16,8 +14,8 @@ services:
     volumes:
       - /lib/modules:/lib/modules:ro
       - wireguard-config:/config
-      - ./scripts/wireguard-entrypoint.sh:/usr/local/bin/wireguard-entrypoint.sh:ro
-    entrypoint: ["/usr/local/bin/wireguard-entrypoint.sh", "/init"]
+      - ./scripts/wireguard-entrypoint.sh:/wireguard-entrypoint.sh:ro
+    entrypoint: ["/wireguard-entrypoint.sh", "/init"]
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
     restart: unless-stopped
