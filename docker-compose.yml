@@ -13,7 +13,7 @@ services:
       - PGID=1000
       - TZ=Europe/Istanbul
       - WIREGUARD_CONF=wg0
-      - WIREGUARD_PEER1=$${{ team.AWS_EC2_WIREGUARD_PEER1 }}
+      - WIREGUARD_PEER1=${ team.AWS_EC2_WIREGUARD_PEER1 }
     volumes:
       - wireguard-config:/config/wg0.conf
       - /lib/modules:/lib/modules:ro
