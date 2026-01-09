@@ -1,6 +1,7 @@
 # Environment
 .env
 .env.prod
+.env.prod.zip
 
 # Dependencies
 node_modules/
