@@ -11,12 +11,13 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=Europe/Istanbul
-      - WIREGUARD_CONF=wg0
+      - WIREGUARD_CONF=wg_confs/wg0
+      - WG_CONF0=${WG_CONF0}
     volumes:
       - /lib/modules:/lib/modules:ro
-      - type: bind
-        source: wireguard-config
-        target: /config/wg0.conf
+      - wireguard-config:/config
+      - ./scripts/wireguard-entrypoint.sh:/usr/local/bin/wireguard-entrypoint.sh:ro
+    entrypoint: ["/usr/local/bin/wireguard-entrypoint.sh", "/init"]
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
     restart: unless-stopped
