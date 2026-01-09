@@ -7,11 +7,13 @@ services:
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
+    entrypoint: ["/bin/sh", "-c", "if [ -n \"$WIREGUARD_PEER1\" ]; then echo \"$WIREGUARD_PEER1\" > /config/wg0.conf; fi; exec /init"]
     environment:
       - PUID=1000
       - PGID=1000
       - TZ=Europe/Istanbul
       - WIREGUARD_CONF=wg0
+      - WIREGUARD_PEER1=$${{ team.AWS_EC2_WIREGUARD_PEER1 }}
     volumes:
       - wireguard-config:/config/wg0.conf
       - /lib/modules:/lib/modules:ro
