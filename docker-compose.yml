@@ -1,12 +1,33 @@
 version: '3.8'
 
 services:
+  wireguard:
+    image: linuxserver/wireguard
+    container_name: discord-recorder-wireguard
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Istanbul
+      - WIREGUARD_CONF=wg0
+    volumes:
+      - wireguard-config:/config/wg0.conf
+      - /lib/modules:/lib/modules:ro
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    restart: unless-stopped
+
   discord-recorder:
     build:
       context: .
       args:
         STT_MODE: ${STT_MODE:-local}
     container_name: discord-recorder
+    depends_on:
+      - wireguard
+    network_mode: service:wireguard
     restart: unless-stopped
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
@@ -16,14 +37,11 @@ services:
       - WHISPER_MODEL=${WHISPER_MODEL:-base}
       - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY:-}
       - CLEANUP_TEMP_FILES=${CLEANUP_TEMP_FILES:-true}
-      - TAILSCALE_AUTH_KEY=${TAILSCALE_AUTH_KEY}
-      - TAILSCALE_EXIT_NODE_IP=${TAILSCALE_EXIT_NODE_IP}
     volumes:
       - recordings-data:/app/recordings
       - transcripts-data:/app/transcripts
-      - tailscale-data:/var/lib/tailscale
 
 volumes:
-  tailscale-data:
+  wireguard-config:
   recordings-data:
   transcripts-data:

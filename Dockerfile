@@ -11,11 +11,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     ca-certificates \
-    iptables \
     && rm -rf /var/lib/apt/lists/*
-
-# Install Tailscale
-RUN curl -fsSL https://tailscale.com/install.sh | sh
 
 # Conditionally install Whisper X only if not cloud mode
 RUN if [ "$STT_MODE" != "cloud" ]; then pip3 install --break-system-packages whisperx; fi
@@ -35,8 +31,9 @@ COPY . .
 # Create directories for recordings and transcripts
 RUN mkdir -p recordings transcripts
 
-# Make script executable
-RUN chmod +x scripts/start-with-tailscale.sh
+# Expose port for development (optional)
+EXPOSE 3000
 
-# Run the bot with Tailscale wrapper
-CMD ["scripts/start-with-tailscale.sh"]
+# Run the bot
+CMD ["npm", "run", "start"]
+
