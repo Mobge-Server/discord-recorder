@@ -7,12 +7,13 @@ const logger = require('./utils/logger');
 const TIMEZONE = 'Europe/Istanbul';
 
 class AudioRecorder {
-    constructor(connection, sessionDir, sessionStartTime) {
+    constructor(connection, sessionDir, sessionStartTime, channel) {
         this.connection = connection;
         this.sessionDir = sessionDir;
         this.sessionStartTime = sessionStartTime;
+        this.channel = channel; // Voice channel reference for resolving usernames
         this.receiver = null;
-        this.streams = new Map(); // userId -> { stream, writeStream, startOffset, username }
+        this.streams = new Map(); // userId -> { stream, writeStream, startOffset, displayName }
         this.recordedFiles = [];
         this.isRecording = false;
     }
@@ -42,6 +43,19 @@ class AudioRecorder {
      */
     startUserRecording(userId) {
         try {
+            // Resolve display name NOW while we have channel access
+            // This is critical for multi-worker scenarios where cache isn't shared
+            let displayName = `USER_${userId}`;
+            try {
+                const member = this.channel?.guild?.members?.cache?.get(userId);
+                if (member) {
+                    displayName = member.displayName || member.user?.username || displayName;
+                    logger.info(`Resolved username for ${userId}: ${displayName}`);
+                }
+            } catch (e) {
+                logger.warn(`Could not resolve username for ${userId} at recording start`);
+            }
+
             // Get the audio stream for this user (Opus packets)
             const audioStream = this.receiver.subscribe(userId, {
                 end: {
@@ -70,38 +84,18 @@ class AudioRecorder {
                 }
             });
 
-            // Store stream info
-            this.streams.set(userId, {
-                audioStream, // Keep ref to original stream
-                decoder,     // Keep ref to decoder
-                writeStream,
-                filePath,
-                startOffset,
-                startTime: Date.now(),
-            });
-
-            logger.info(`Recording user: ${userId}`);
-
-            // Handle stream end
-            audioStream.on('end', () => {
-                this.finalizeUserRecording(userId);
-            });
-
-            audioStream.on('error', (error) => {
-                logger.error(`Audio stream error for ${userId}:`, error);
-                this.finalizeUserRecording(userId);
-            });
-
-            // Store stream info
+            // Store stream info with displayName
             this.streams.set(userId, {
                 audioStream,
+                decoder,
                 writeStream,
                 filePath,
                 startOffset,
                 startTime: Date.now(),
+                displayName, // Store resolved username at recording start
             });
 
-            logger.info(`Recording user: ${userId}`);
+            logger.info(`Recording user: ${displayName} (${userId})`);
 
             // Handle stream end
             audioStream.on('end', () => {
@@ -140,9 +134,10 @@ class AudioRecorder {
                         path: streamInfo.filePath,
                         startOffset: streamInfo.startOffset || 0,
                         duration: (Date.now() - streamInfo.startTime) / 1000,
+                        displayName: streamInfo.displayName || `USER_${userId}`, // Include resolved username
                     });
 
-                    logger.info(`Saved audio for user ${userId}: ${path.basename(streamInfo.filePath)}`);
+                    logger.info(`Saved audio for user ${streamInfo.displayName || userId}: ${path.basename(streamInfo.filePath)}`);
                 } else {
                     // Remove empty file
                     fs.unlinkSync(streamInfo.filePath);

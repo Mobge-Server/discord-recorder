@@ -96,8 +96,8 @@ class RecordingSession {
             throw lastError;
         }
 
-        // Start audio recording
-        this.audioRecorder = new AudioRecorder(this.connection, this.sessionDir, this.startTime);
+        // Start audio recording - pass channel for username resolution
+        this.audioRecorder = new AudioRecorder(this.connection, this.sessionDir, this.startTime, this.channel);
         this.audioRecorder.start();
 
         // Send message to voice text channel
@@ -157,20 +157,26 @@ class RecordingSession {
             // 2. Transcribe
             logger.info('Transcribing...');
 
-            // Resolving Usernames
+            // Use pre-resolved displayNames from audioRecorder
+            // Fallback to API call only if displayName is missing or is USER_ID format
             const filesWithNames = await Promise.all(recordedFiles.map(async (file) => {
-                let displayName = `USER_${file.userId}`;
+                // If displayName was already resolved at recording time, use it
+                if (file.displayName && !file.displayName.startsWith('USER_')) {
+                    return file;
+                }
+
+                // Fallback: Try to resolve via API (may fail for cross-worker scenarios)
+                let displayName = file.displayName || `USER_${file.userId}`;
                 try {
                     const member = await this.channel.guild.members.fetch(file.userId).catch(() => null);
                     if (member) {
-                        displayName = member.displayName; // or member.user.username
+                        displayName = member.displayName;
                     } else {
-                        // Try cache if fetch fails
                         const user = this.client.users.cache.get(file.userId);
                         if (user) displayName = user.username;
                     }
                 } catch (e) {
-                    logger.warn(`Could not resolve name for user ${file.userId}`);
+                    logger.warn(`Could not resolve name for user ${file.userId} (fallback)`);
                 }
                 return { ...file, displayName };
             }));
